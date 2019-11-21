@@ -1,0 +1,160 @@
+---
+title: "GWAS Summaries and Documentation"
+author: "a.lobley@qmul.ac.uk"
+date: "21 November 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## Preparing inputs
+Before running phenotype associations, create gen and sample files for variant data. Gen files describe multi-sample
+mutations. See file reference here: . Often useful to create bim fam and bed associated files. Tools needed include:
+
+  |Software|Descript|URL
+  ----------|----------------
+  |plink|PLINK 1.9 - cog-genomics.org, for variant assoc| [plink](http://cog-genomics.org)
+  |gtool|GTOOL suite oxford well - for merging vcfs| [GTOOL](https://www.well.ox.ac.uk/~cfreeman/software/gwas/gtool)
+  |snptest|Oxford tool for variant association| [SNPTEST](https://mathgen.stats.ox.ac.uk/genetics_software/snptest/snptest)
+  |vcf-tools| VCFtools for manipulating/filtering vcfs | [vcf-tools](https://vcftools.github.io/index.html)
+  |eigenstrat|for PCA and stratification| [EigenSOFT](https://www.hsph.harvard.edu/alkes-price/eigensoft-frequently-asked-questions/)
+  |PRSice|PRSice for multi-variant effects| [PRSice]()
+  
+## Preparing Input Files
+
+### Convert vcf to sample and gen files:
+
+```{r gen, echo=TRUE, eval=F}
+
+
+input.gen     is the input gen file
+input.sample  is prefixed sample file
+output.pca    is prefix sample file
+
+plink --gen [input.gen] --sample [input.sample] oxford --out [prefix]
+```
+
+### Create IBD Identity By Descent report:
+
+```{r family, echo=TRUE, eval=F}
+
+input.vcf     is the  vcf file
+output.gen    is prefix gen file
+output.sample is prefix sample file
+
+plink --vcf input.vcf
+      --hwe 1e-6
+      --maf 0.05
+      --genome 
+      --out [myprefix]
+
+Outputs:
+  
+myprefix.genome
+
+```
+
+## Running SNPtest
+
+### Run SNPtest
+```{r snptest, echo=TRUE, eval=F}
+
+snptest_v2.5.4-beta3 
+      -data     input.gen pheno.txt # input gen file and sample phenotypes
+      -exclude_samples exclude   # any samples i.e. relatives to report
+      -o        freckles.snptest # freckle output file 
+      -miss_thresh 0.05          # missingness threshold
+      -frequentist 1 2 3 4 5     # score methods ie add dom hethom and gen
+      -method   score   
+      -pheno    freckles 
+      -cov_names age PC1 PC2 PC3 #--- adjustment covariates
+  
+
+```
+
+
+## Running plink
+
+### Run plink associations
+```{r snptestf, echo=TRUE, eval=F}
+
+snptest -data     input.gen pheno.txt # input gen file and sample phenotypes
+      -exclude_samples exclude   # any samples i.e. relatives to report
+      -o        freckles.snptest # freckle output file 
+      -miss_thresh 0.05          # missingness threshold
+      -frequentist 1 2 3 4 5     # score methods ie add dom hethom and gen
+      -method   score   
+      -pheno    freckles 
+      -cov_names age PC1 PC2 PC3 #--- adjustment covariates
+  
+
+```
+
+### Run PLINK
+```{r plink, echo=TRUE, eval=F}
+
+plink  --noweb  
+       --remove       all.famExclude      # sample ids to exclude, min 2 columns 
+       --gen          input.gen           # input gen file
+       --pheno        pheno.txt           # phenotype file
+       --attrib       input.info.genot    # attribute for 
+       --sample       input.sample        # input samples
+       --linear       genotypic interaction # test types
+       --all-pheno                        # run all phenotypes in pheno file
+       --covar        cov.txt             # covariates specification
+       --covar-number 2,3                 # covariates to correct for
+       --pfilter      1.0                 # pvalue filter
+       --out          output              # output file
+
+Output:
+  
+  all.P19.assoc.linear # where P2 is the 2nd phenotype in the pheno file
+  all.P2.assoc.linear
+
+```
+
+
+## Running PRSice
+
+### Using pathway tools and genesets
+
+1. Download hg38.gtf from Ensembl [hg38](ftp://ftp.ensembl.org/pub/release-98/gtf/homo_sapiens) 
+2. Download enzyme.gmt or KEGG.gmt [GeneSets](https://enrichmentmap.readthedocs.io/en/latest/GeneSets.html)
+3. Run prsice using snptest or plink formatted output
+
+```{r PRSice, echo=TRUE, eval=F}
+
+./PRSice_linux        
+    --A1 A1                # alternate allele col name
+    --A2 A2                # ref allele col name
+    --bar-levels 0.0000001,0.000001,0.00001,0.0001,0.001  # threhsolds for grouping snps 
+    --base freckles.snptestf   #-- output of PRSice or snptest
+    --beta                  # beta or odds ratio
+    --binary-target F       # binary or continuous trait
+    --allow-inter           # intermediate files ouptut
+    --bp POS                # name of position column
+    --chr CHR               # name of chromosome column
+    --pheno-file pheno.txt  # phenotype file
+    --pheno-col  freckles   # phenotype name
+    --non-cumulate          # don't accumulate snps scores over bar-levels
+    --clump-kb  250         # clump snps at this window to overcome LD
+    --interval  5e-05       # interval
+    --lower     1e-10       # lowest pvalue
+    --upper     0.001       # highest pvalue
+    --model     add         # model type add dom etc
+    --cov-file cov.txt      # file of covariations
+    --pvalue P              # pvalue column name
+    --all-score             # all scores output file
+    --seed    3814292426    # random seed
+    --snp     SNP           # snp column name
+    --stat    BETA          # statistic effect size column name
+    --target  mygen         # target file [input gen]
+    --thread  6             # threads
+    --gtf     hg38.gtf      # ensembl hg38 gtf
+    --msigdb  msigdb.gmt    # msigdb ensembl gmt file
+    --out     myprsice      # output prefix
+  
+
+```
+
